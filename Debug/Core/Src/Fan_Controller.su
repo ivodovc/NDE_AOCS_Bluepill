@@ -1,0 +1,3 @@
+../Core/Src/Fan_Controller.c:9:6:init_fan	24	static
+../Core/Src/Fan_Controller.c:22:6:set_fan_speed	16	static
+../Core/Src/Fan_Controller.c:32:6:set_fan_speed2	16	static

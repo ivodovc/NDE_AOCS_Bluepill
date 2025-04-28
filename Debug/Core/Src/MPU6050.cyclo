@@ -1,0 +1,7 @@
+../Core/Src/MPU6050.c:7:9:MPU6050_Init	2
+../Core/Src/MPU6050.c:38:6:MPU6050_Read_MPU	1
+../Core/Src/MPU6050.c:61:6:Calculate_Accel_Values	1
+../Core/Src/MPU6050.c:68:6:Calculate_Gyro_Values	1
+../Core/Src/MPU6050.c:76:6:Get_Accel_Angles	2
+../Core/Src/MPU6050.c:96:6:Get_Gyro_Angles	1
+../Core/Src/MPU6050.c:109:6:Comp_Filter_Results	1
