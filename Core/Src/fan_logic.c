@@ -78,23 +78,19 @@ void light_tracking_logic(uint16_t rawValues[4], float *required_rotation){
 	switch (max_index)
 	{
 		case 0:
-			*fan_speed1 = 0;
-			*fan_speed2 = 0;
+			*required_rotation = -60;
 			break; // do nothing, already pointed at maximum
 
 		case 1:
-			*fan_speed1 = 850;
-			*fan_speed2 = 850;
+			*required_rotation = 0; // deg/s
 			break; // do nothing, already pointed at maximum
 
 		case 2:
-			*fan_speed1 = -850;
-			*fan_speed2 = -850;
+			*required_rotation = 60;
 			break; // do nothing, already pointed at maximum
 
 		case 3:
-			*fan_speed1 = -850;
-			*fan_speed2 = -850;
+			*required_rotation = 100;
 			break; // do nothing, already pointed at maximum
 
 	}

@@ -70,6 +70,8 @@ static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 float fan_speed_1, fan_speed_2 = 0;
 
+#define ROT_THRESHOLD 7.5
+
 void control_rotation(float desired_rotation, float actual_rotation) {
 	// Prepracovat ako PID kontroler, ak to nebude fungovat
 	if (actual_rotation-desired_rotation > 7.5) {
@@ -237,18 +239,16 @@ int main(void)
 	  if (global_mode == 0){
 		  control_rotation(0, GyroX);
 	  }else if (global_mode == 1){
-		  int16_t fan_speed_local1, fan_speed_local2;
-		  light_tracking_logic(rawValues, &fan_speed_local1, &fan_speed_local2);
-		  set_fan_speed(fan_speed_local1);
-		  set_fan_speed2(fan_speed_local2);
+		  float desired_rotation = 0;
+		  light_tracking_logic(rawValues, &desired_rotation);
+		  control_rotation(desired_rotation, GyroX);
 		  char msg[64];
 		  snprintf(msg, sizeof(msg), "Comparison of ADC values: %d, %d, %d, %d, %d\r\n", readValue1, readValue2, readValue3, readValue4, readValue5);
 
 		 // Odeslání přes UART
 		 HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
 	  }else if(global_mode == 2){
-		  set_fan_speed(800);
-		  set_fan_speed2(-800);
+		  control_rotation(60, GyroX);
 	  }
   }
   /* USER CODE END 3 */
