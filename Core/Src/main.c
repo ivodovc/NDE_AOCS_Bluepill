@@ -25,6 +25,7 @@
 #include <string.h>
 #include "MPU6050.h"
 #include "Fan_Controller.h"
+#include "fan_logic.h" // Petr
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,6 +45,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
 
 I2C_HandleTypeDef hi2c1;
 
@@ -59,6 +61,7 @@ UART_HandleTypeDef huart1;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM3_Init(void);
@@ -87,6 +90,24 @@ void control_rotation(float desired_rotation, float actual_rotation) {
 	}
 }
 
+// ADC cast
+uint16_t readValue1;
+uint16_t readValue2;
+uint16_t readValue3;
+uint16_t readValue4;
+uint16_t readValue5;
+
+uint16_t rawValues[5];
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
+    if (hadc->Instance == ADC1) {
+        readValue1 = rawValues[0];
+        readValue2 = rawValues[1];
+        readValue3 = rawValues[2];
+        readValue4 = rawValues[3];
+        readValue5 = rawValues[4];
+    }
+}
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -99,6 +120,8 @@ uint32_t ch1_counter_val, ch2_counter_val;
 // RX buffer for UART
 #define RX_BFR_SIZE 100
 char RxBuffer[RX_BFR_SIZE];
+
+uint16_t global_mode = 0; // 0 is stabilization, 1 is light tracking, 2 is rotation
 /* USER CODE END 0 */
 
 /**
@@ -130,6 +153,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
   MX_TIM3_Init();
@@ -137,17 +161,18 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
-  //HAL_UARTEx_ReceiveToIdle_IT(&huart1, (uint8_t *) RxBuffer, RX_BFR_SIZE);
+  HAL_UARTEx_ReceiveToIdle_IT(&huart1, (uint8_t *) RxBuffer, RX_BFR_SIZE);
 
   // Set up HC05 bluetooth controller
-  printf("Setting up HC05 module\n");
+  printf("Setting up Bluetooth module\n");
 
   // reset module to original state
-  /*char at_orgl[] = "AT+ORGL\r\n";
+  char at_orgl[] = "AT+ORGL\r\n";
   HAL_UART_Transmit_IT(&huart1, (uint8_t*)&at_orgl, strlen(at_orgl));
 
+  // set HC06 module name
   char at_set_name[] = "AT+NAME=NDEProjekt\r\n";
-  HAL_UART_Transmit_IT(&huart1, (uint8_t*)&at_set_name, strlen(at_set_name));*/
+  HAL_UART_Transmit_IT(&huart1, (uint8_t*)&at_set_name, strlen(at_set_name));
 
   MPU6050_t MPU6050;
 
@@ -168,10 +193,19 @@ int main(void)
 
   //ch1_counter_val = 0;//(TIM1 -> ARR);
   //ch2_counter_val = 0;
-  fan_speed_1 = 1;
-  fan_speed_2 = 1;
+
+  // calibrate ADC
+  HAL_ADCEx_Calibration_Start(&hadc1);
+  HAL_Delay(10);
+  // end of calibration
+
+  fan_speed_1 = 0;
+  fan_speed_2 = 0;
   while (1)
   {
+
+	 HAL_ADC_Start_DMA(&hadc1, (uint16_t *) rawValues, 5);
+	 HAL_Delay(10);
 
     /* USER CODE END WHILE */
 
@@ -199,47 +233,23 @@ int main(void)
 	  AccelRoll = MPU6050.Accel_Roll;
 	  AccelPitch = MPU6050.Accel_Pitch;
 
-	  control_rotation(0, GyroX);
-	  //fan_speed_1 = (AccelZ/10.5 * 1000);
-	  /*fan_speed_1 = 0;
-	  fan_speed_2 = 0;
-	  set_fan_speed(fan_speed_1);
-	  set_fan_speed2(fan_speed_2);
-	  HAL_Delay(2000);
 
-	  fan_speed_1 = 600;
-	  fan_speed_2 = 600;
-	  set_fan_speed(fan_speed_1);
-	  set_fan_speed2(fan_speed_2);
-	  HAL_Delay(2000);
+	  if (global_mode == 0){
+		  control_rotation(0, GyroX);
+	  }else if (global_mode == 1){
+		  int16_t fan_speed_local1, fan_speed_local2;
+		  light_tracking_logic(rawValues, &fan_speed_local1, &fan_speed_local2);
+		  set_fan_speed(fan_speed_local1);
+		  set_fan_speed2(fan_speed_local2);
+		  char msg[64];
+		  snprintf(msg, sizeof(msg), "Comparison of ADC values: %d, %d, %d, %d, %d\r\n", readValue1, readValue2, readValue3, readValue4, readValue5);
 
-	  fan_speed_1 = 900;
-	  fan_speed_2 = 900;
-	  set_fan_speed(fan_speed_1);
-	  set_fan_speed2(fan_speed_2);
-	  HAL_Delay(2000);
-
-	  fan_speed_1 = -900;
-	  fan_speed_2 = -900;*/
-
-	  //HAL_Delay(2000);
-
-	  /*ch1_counter_val = (TIM1->ARR)*0.8;
-	  TIM1->CCR1 = ch1_counter_val;
-	  HAL_Delay(5000);
-	  ch1_counter_val = 0;
-	  TIM1->CCR1 = ch1_counter_val;
-
-	  ch2_counter_val = (TIM1->ARR)*0.8;
-
-	  TIM1->CCR2 = ch2_counter_val;
-	  HAL_Delay(5000);
-	  ch2_counter_val = 0;
-	  TIM1->CCR2 = ch2_counter_val;
-	  HAL_Delay(1000);
-	  char send_txt[] = "HelloBluetooth\r\n";
-	  HAL_UART_Transmit_IT(&huart1, (uint8_t*)&send_txt, strlen(send_txt));
-	  printf("GyroscopeMPU6050Test\n");*/
+		 // Odeslání přes UART
+		 HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+	  }else if(global_mode == 2){
+		  set_fan_speed(800);
+		  set_fan_speed2(-800);
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -308,12 +318,12 @@ static void MX_ADC1_Init(void)
   /** Common config
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.NbrOfConversion = 5;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
     Error_Handler();
@@ -324,6 +334,42 @@ static void MX_ADC1_Init(void)
   sConfig.Channel = ADC_CHANNEL_0;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = ADC_REGULAR_RANK_2;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_2;
+  sConfig.Rank = ADC_REGULAR_RANK_3;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_3;
+  sConfig.Rank = ADC_REGULAR_RANK_4;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_4;
+  sConfig.Rank = ADC_REGULAR_RANK_5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -490,7 +536,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = 9600;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -504,6 +550,22 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
 
@@ -557,11 +619,27 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 	static uint8_t i = 0;
 	if (htim == &htim2)
 	{
-		HAL_GPIO_TogglePin(GPIOC, leds[i]);
+		if (global_mode == 0){
+			HAL_GPIO_TogglePin(GPIOC, LED_BLUE_Pin);
+			HAL_GPIO_WritePin(GPIOC, LED_GREEN_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOC, LED_RED_Pin, GPIO_PIN_RESET);
+		}else if (global_mode == 1){
+			HAL_GPIO_WritePin(GPIOC, LED_BLUE_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOC, LED_RED_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_TogglePin(GPIOC, LED_GREEN_Pin);
+
+		}else if (global_mode == 2){
+			HAL_GPIO_WritePin(GPIOC, LED_BLUE_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOC, LED_GREEN_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_TogglePin(GPIOC, LED_RED_Pin);
+
+		}
+
+		/*HAL_GPIO_TogglePin(GPIOC, leds[i]);
 		i++;
 		if (i>2){
 			i=0;
-		}
+		}*/
 	}
 }
 
@@ -572,6 +650,27 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 		printf("Size %d\n", Size);
 		printf(RxBuffer);
 		printf("Received: %s\n", RxBuffer);
+
+		char reply[256];
+		snprintf(reply, sizeof(reply), "UART Received text: %s\r\n", RxBuffer);
+
+		HAL_UART_Transmit_IT(&huart1, reply, strlen(reply));
+		char* to_send;
+		if (strcmp(RxBuffer, "MODE_S\n") == 0){
+			global_mode = 0;
+			to_send = "setting mode to BASIC mode\r\n";
+		}else if(strcmp(RxBuffer, "MODE_L\n") == 0){
+			global_mode = 1;
+			to_send = "setting mode to light tracking mode\r\n";
+		}else if(strcmp(RxBuffer, "MODE_R\n") == 0){
+			global_mode = 2;
+			to_send = "setting mode to ROTATE mode\r\n";
+		}else{
+			global_mode = 9;
+			to_send = "Unable to decode command: \r\n";
+		}
+
+		HAL_UART_Transmit_IT(&huart1, to_send, strlen(to_send));
 		//process_command_string(RxBuffer, &global_command, global_args);
 		HAL_UARTEx_ReceiveToIdle_IT(&huart1, (uint8_t *) RxBuffer, RX_BFR_SIZE);
 		//__HAL_DMA_DISABLE_IT(&hdma_usart1_rx, DMA_IT_HT);

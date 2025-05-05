@@ -1,0 +1,4 @@
+../Core/Src/fan_logic.c:7:6:FanLogic_Update	15
+../Core/Src/fan_logic.c:45:5:findMaxIndex	3
+../Core/Src/fan_logic.c:57:5:findMinIndex	3
+../Core/Src/fan_logic.c:69:6:light_tracking_logic	5
